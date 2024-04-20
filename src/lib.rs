@@ -214,7 +214,7 @@ pub trait FromToTomlDateTime: Sized {
     /// # Errors
     /// Fails when the [`Self`] is not representable by [`TomlDatetime`] mainly
     /// due to a negative year
-    fn to_toml(&self) -> Result<TomlDatetime>;
+    fn to_toml(&self) -> Result<Option<TomlDatetime>>;
 }
 
 #[cfg(feature = "chrono")]
@@ -239,8 +239,8 @@ mod chrono {
                 .ok_or(Error::UnableToCreateRustType)
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
-            Ok(TomlDatetime {
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
+            Ok(Some(TomlDatetime {
                 date: Some(TomlDate {
                     year: self.year().try_into().map_err(|_| Error::InvalidYear)?,
                     month: self.month() as u8,
@@ -248,7 +248,7 @@ mod chrono {
                 }),
                 time: None,
                 offset: None,
-            })
+            }))
         }
     }
 
@@ -270,8 +270,8 @@ mod chrono {
                 .ok_or(Error::UnableToCreateRustType)
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
-            Ok(TomlDatetime {
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
+            Ok(Some(TomlDatetime {
                 date: None,
                 time: Some(TomlTime {
                     hour: self.hour() as u8,
@@ -280,7 +280,7 @@ mod chrono {
                     nanosecond: self.nanosecond(),
                 }),
                 offset: None,
-            })
+            }))
         }
     }
 
@@ -305,12 +305,16 @@ mod chrono {
             })
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
-            Ok(TomlDatetime {
-                date: self.date().to_toml()?.date,
-                time: self.time().to_toml()?.time,
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
+            Ok(self
+                .date()
+                .to_toml()?
+                .zip(self.time().to_toml()?)
+                .map(|(date, time)| TomlDatetime {
+                    date: date.date,
+                    time: time.time,
                 offset: None,
-            })
+                }))
         }
     }
 
@@ -335,12 +339,12 @@ mod chrono {
             }
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
             let date_time = self.naive_local().to_toml()?;
-            Ok(TomlDatetime {
+            Ok(date_time.map(|dt| TomlDatetime {
                 offset: Some(TomlOffset::Z),
-                ..date_time
-            })
+                ..dt
+            }))
         }
     }
 
@@ -370,18 +374,18 @@ mod chrono {
             }
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
             let timezone = Duration::seconds(self.timezone().fix().local_minus_utc().into());
             let hours = timezone.num_hours();
             let minutes = timezone.num_minutes() - hours * 60;
             let date_time = self.naive_local().to_toml()?;
-            Ok(TomlDatetime {
+            Ok(date_time.map(|dt| TomlDatetime {
                 offset: Some(TomlOffset::Custom {
                     hours: hours as i8,
                     minutes: minutes as u8,
                 }),
-                ..date_time
-            })
+                ..dt
+            }))
         }
     }
 }
@@ -410,8 +414,8 @@ mod time {
             Date::from_calendar_date(year.into(), month.try_into()?, day).map_err(From::from)
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
-            Ok(TomlDatetime {
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
+            Ok(Some(TomlDatetime {
                 date: Some(TomlDate {
                     year: self.year().try_into().map_err(|_| Error::InvalidYear)?,
                     month: self.month() as u8,
@@ -419,7 +423,7 @@ mod time {
                 }),
                 time: None,
                 offset: None,
-            })
+            }))
         }
     }
 
@@ -440,8 +444,8 @@ mod time {
             Time::from_hms_nano(hour, minute, second, nanosecond).map_err(From::from)
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
-            Ok(TomlDatetime {
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
+            Ok(Some(TomlDatetime {
                 date: None,
                 time: Some(TomlTime {
                     hour: self.hour(),
@@ -450,7 +454,7 @@ mod time {
                     nanosecond: self.nanosecond(),
                 }),
                 offset: None,
-            })
+            }))
         }
     }
 
@@ -475,12 +479,16 @@ mod time {
             })
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
-            Ok(TomlDatetime {
-                date: self.date().to_toml()?.date,
-                time: self.time().to_toml()?.time,
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
+            Ok(self
+                .date()
+                .to_toml()?
+                .zip(self.time().to_toml()?)
+                .map(|(date, time)| TomlDatetime {
+                    date: date.date,
+                    time: time.time,
                 offset: None,
-            })
+                }))
         }
     }
 
@@ -509,15 +517,19 @@ mod time {
             }
         }
 
-        fn to_toml(&self) -> Result<TomlDatetime> {
-            Ok(TomlDatetime {
-                date: self.date().to_toml()?.date,
-                time: self.time().to_toml()?.time,
+        fn to_toml(&self) -> Result<Option<TomlDatetime>> {
+            Ok(self
+                .date()
+                .to_toml()?
+                .zip(self.time().to_toml()?)
+                .map(|(date, time)| TomlDatetime {
+                    date: date.date,
+                    time: time.time,
                 offset: Some(TomlOffset::Custom {
                     hours: self.offset().whole_hours(),
                     minutes: self.offset().minutes_past_hour().unsigned_abs(),
                 }),
-            })
+                }))
         }
     }
 }
